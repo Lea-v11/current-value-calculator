@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta
+  name="viewport"
+  content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"
+>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#ff9800">
+
+<link rel="manifest" href="manifest.json">
+
+<title>現在値計算ツール</title>
+
+<style>
+
+*{
+    box-sizing:border-box;
+    font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+}
+
+body{
+    margin:0;
+    background:#f4f4f4;
+    overflow:hidden;
+    touch-action: manipulation;
+}
+
+.container{
+    display:flex;
+    height:100vh;
+}
+
+.main{
+    flex:1;
+    padding:12px;
+}
+
+.history-panel{
+    width:0;
+    transition:0.3s;
+    overflow:hidden;
+    background:#ffffff;
+    border-left:2px solid #ddd;
+}
+
+.history-panel.open{
+    width:350px;
+}
+
+.history-content{
+    padding:10px;
+    height:100%;
+    overflow:auto;
+}
+
+.top{
+    display:flex;
+    gap:12px;
+}
+
+.value-area{
+    flex:1;
+    background:#ffb74d;
+    border-radius:12px;
+    padding:20px;
+}
+
+.value-title{
+    font-size:24px;
+}
+
+.value{
+    font-size:72px;
+    font-weight:bold;
+    text-align:center;
+}
+
+.side-buttons{
+    width:180px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+}
+
+.side-buttons button{
+    height:90px;
+}
+
+button{
+    border:none;
+    border-radius:10px;
+    font-size:24px;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+.pink{
+    background:#ff80ab;
+}
+
+.orange{
+    background:#ffcc80;
+}
+
+.blue{
+    background:#64b5f6;
+}
+
+.green{
+    background:#aed581;
+}
+
+.active{
+    outline:5px solid #2e7d32;
+}
+
+.section{
+    margin-top:12px;
+}
+
+.grid5{
+    display:grid;
+    grid-template-columns:repeat(5,1fr);
+    gap:10px;
+}
+
+.grid6{
+    display:grid;
+    grid-template-columns:repeat(6,1fr);
+    gap:10px;
+}
+
+.grid5 button,
+.grid6 button{
+    height:70px;
+}
+
+.status{
+    margin-top:10px;
+    padding:10px;
+    background:white;
+    border-radius:10px;
+    font-size:22px;
+}
+
+.radio-group{
+    display:flex;
+    gap:10px;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="main">
+
+<div class="top">
+
+<div class="value-area">
+<div class="value-title">現在値</div>
+<div id="currentValue" class="value">105.0</div>
+</div>
+
+<div class="side-buttons">
+<button class="pink" onclick="undo()">戻る</button>
+<button class="pink" onclick="resetAll()">リセット</button>
+<button class="pink" onclick="toggleHistory()">履歴表示</button>
+</div>
+
+</div>
+
+<div class="status">
+<div>減少軽減率: <span id="reductionRate">0</span>%</div>
+<div>FUJI: <span id="fujiStatus">OFF</span></div>
+</div>
+
+<div class="section grid5">
+
+<button class="green" id="minus5Btn" onclick="toggleMinus5()">-5%</button>
+<button class="green" id="fujiBtn" onclick="toggleFuji()">FUJI</button>
+<button class="green" id="consume25Btn" onclick="toggleConsume25()">消費-25%</button>
+
+<button class="green" id="skill1Btn" onclick="setSkill(1)">技巧1</button>
+<button class="green" id="skill2Btn" onclick="setSkill(2)">技巧2</button>
+
+</div>
+
+<div class="section grid5">
+
+<button class="orange" onclick="addValue(30)">+30</button>
+<button class="orange" onclick="addValue(60)">+60</button>
+<button class="orange" onclick="addValue(75)">+75</button>
+<button class="orange" onclick="addValue(150)">+150</button>
+<button class="orange" onclick="fixedAdd150()">固定+150</button>
+
+</div>
+
+<div class="section grid6">
+
+<button class="blue" onclick="subtractValue(40)">-40</button>
+<button class="blue" onclick="subtractValue(50)">-50</button>
+<button class="blue" onclick="subtractValue(60)">-60</button>
+<button class="blue" onclick="subtractValue(70)">-70</button>
+<button class="blue" onclick="subtractValue(80)">-80</button>
+<button class="blue" onclick="subtractValue(100)">-100</button>
+
+<button class="blue" onclick="subtractValue(110)">-110</button>
+<button class="blue" onclick="subtractValue(120)">-120</button>
+<button class="blue" onclick="subtractValue(130)">-130</button>
+<button class="blue" onclick="subtractValue(140)">-140</button>
+<button class="blue" onclick="subtractValue(150)">-150</button>
+
+<div></div>
+
+</div>
+
+<div class="section grid5">
+
+<button class="blue" onclick="fixedMinus20()">固定-20%</button>
+<div></div>
+<div></div>
+<div></div>
+<button class="blue" onclick="fixedMinus195()">固定-195</button>
+
+</div>
+
+</div>
+
+<div id="historyPanel" class="history-panel">
+<div class="history-content">
+
+<h2>履歴</h2>
+
+<div id="historyList"></div>
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+const INITIAL_VALUE = 105;
+const MAX_VALUE = 300;
+const MIN_VALUE = 0;
+const HISTORY_LIMIT = 100;
+
+let currentValue = INITIAL_VALUE;
+let history = [];
+let undoStack = [];
+
+let minus5 = false;
+let fuji = false;
+let consume25 = false;
+let skill = 0;
+
+function clamp(v){
+    return Math.max(MIN_VALUE,Math.min(MAX_VALUE,v));
+}
+
+function format(v){
+    return v.toFixed(1);
+}
+
+function getReductionRate(){
+
+    let rate = 0;
+
+    if(minus5) rate += 5;
+    if(consume25) rate += 25;
+
+    if(skill === 1) rate += 50;
+    if(skill === 2) rate += 75;
+
+    return Math.min(100,rate);
+}
+
+function saveState(){
+
+    localStorage.setItem("currentValue",currentValue);
+    localStorage.setItem("history",JSON.stringify(history));
+
+    localStorage.setItem("minus5",minus5);
+    localStorage.setItem("fuji",fuji);
+    localStorage.setItem("consume25",consume25);
+    localStorage.setItem("skill",skill);
+}
+
+function loadState(){
+
+    const cv=localStorage.getItem("currentValue");
+    if(cv!==null) currentValue=parseFloat(cv);
+
+    const h=localStorage.getItem("history");
+    if(h) history=JSON.parse(h);
+
+    minus5=localStorage.getItem("minus5")==="true";
+    fuji=localStorage.getItem("fuji")==="true";
+    consume25=localStorage.getItem("consume25")==="true";
+    skill=parseInt(localStorage.getItem("skill")||"0");
+}
+
+function render(){
+
+    document.getElementById("currentValue").textContent = format(currentValue);
+
+    document.getElementById("reductionRate").textContent = getReductionRate();
+    document.getElementById("fujiStatus").textContent = fuji ? "ON":"OFF";
+
+    document.getElementById("minus5Btn").classList.toggle("active",minus5);
+    document.getElementById("fujiBtn").classList.toggle("active",fuji);
+    document.getElementById("consume25Btn").classList.toggle("active",consume25);
+
+    document.getElementById("skill1Btn").classList.toggle("active",skill===1);
+    document.getElementById("skill2Btn").classList.toggle("active",skill===2);
+
+    document.getElementById("historyList").innerHTML =
+        history.slice().reverse().map(v=>`<div style="margin-bottom:12px">${v}</div>`).join("");
+
+    saveState();
+}
+
+function pushUndo(){
+    undoStack.push(currentValue);
+}
+
+function addHistory(text){
+
+    history.push(text);
+
+    if(history.length > HISTORY_LIMIT){
+        history.shift();
+    }
+}
+
+function addValue(v){
+
+    pushUndo();
+
+    let actual = fuji ? (v * 1.25) : v;
+
+    const before = currentValue;
+    currentValue = clamp(currentValue + actual);
+
+    addHistory(
+        `+${v} → 実際 ${actual.toFixed(1)}<br>${before.toFixed(1)} → ${currentValue.toFixed(1)}`
+    );
+
+    render();
+}
+
+function subtractValue(v){
+
+    pushUndo();
+
+    const rate = getReductionRate();
+
+    let actual = v * (1 - rate / 100);
+
+    const before = currentValue;
+
+    currentValue = clamp(currentValue - actual);
+
+    addHistory(
+        `-${v} (軽減${rate}%) → 実際 -${actual.toFixed(1)}<br>${before.toFixed(1)} → ${currentValue.toFixed(1)}`
+    );
+
+    render();
+}
+
+function fixedAdd150(){
+
+    pushUndo();
+
+    const before=currentValue;
+
+    currentValue = clamp(currentValue + 150);
+
+    addHistory(
+        `固定+150<br>${before.toFixed(1)} → ${currentValue.toFixed(1)}`
+    );
+
+    render();
+}
+
+function fixedMinus195(){
+
+    pushUndo();
+
+    const before=currentValue;
+
+    currentValue=clamp(currentValue-195);
+
+    addHistory(
+        `固定-195<br>${before.toFixed(1)} → ${currentValue.toFixed(1)}`
+    );
+
+    render();
+}
+
+function fixedMinus20(){
+
+    pushUndo();
+
+    const before=currentValue;
+
+    currentValue=clamp(currentValue*0.8);
+
+    addHistory(
+        `固定-20%<br>${before.toFixed(1)} → ${currentValue.toFixed(1)}`
+    );
+
+    render();
+}
+
+function undo(){
+
+    if(undoStack.length===0) return;
+
+    currentValue = undoStack.pop();
+
+    render();
+}
+
+function resetAll(){
+
+    if(!confirm("リセットしますか？")) return;
+
+    currentValue = INITIAL_VALUE;
+    history = [];
+    undoStack = [];
+
+    render();
+}
+
+function toggleMinus5(){
+    minus5=!minus5;
+    render();
+}
+
+function toggleFuji(){
+    fuji=!fuji;
+    render();
+}
+
+function toggleConsume25(){
+    consume25=!consume25;
+    render();
+}
+
+function setSkill(s){
+
+    if(skill===s){
+        skill=0;
+    }else{
+        skill=s;
+    }
+
+    render();
+}
+
+function toggleHistory(){
+    document
+        .getElementById("historyPanel")
+        .classList
+        .toggle("open");
+}
+
+loadState();
+render();
+
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./service-worker.js');
+}
+
+</script>
+
+</body>
+</html>
